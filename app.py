@@ -101,17 +101,83 @@ def health():
 
 @app.route("/")
 def index():
-    return send_from_directory(BASE_DIR, "index.html")
+    html = """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L 对话</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
+body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
+.header{text-align:center;padding:20px 0 10px}
+.avatar{width:70px;height:70px;border-radius:50%;background:#b89c84;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px}
+.tagline{color:#777;font-size:14px;margin-bottom:16px}
+.chat-box{background:#fff;border-radius:14px;padding:16px;min-height:60vh;margin-bottom:16px}
+.msg-row{margin:12px 0;display:flex}
+.msg-left{justify-content:flex-start}
+.msg-right{justify-content:flex-end}
+.msg-bubble{max-width:75%;padding:10px 14px;border-radius:18px;line-height:1.5;font-size:15px}
+.msg-left .msg-bubble{background:#eee;border-bottom-left-radius:4px}
+.msg-right .msg-bubble{background:#b87c64;color:#fff;border-bottom-right-radius:4px}
+.input-area{display:flex;gap:8px}
+#msg-input{flex:1;padding:12px 16px;border:1px solid #ddd;border-radius:24px;outline:none;font-size:15px}
+#send-btn{padding:12px 22px;background:#b87c64;color:#fff;border:none;border-radius:24px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="header">
+    <div class="avatar">L</div>
+    <!-- 已删除副标题文字 -->
+    <div class="tagline">「岁月无声，记忆有温。」</div>
+</div>
+<div class="chat-box" id="chatContainer"></div>
+<div class="input-area">
+    <input type="text" id="msg-input" placeholder="说点什么..." />
+    <button id="send-btn">发送</button>
+</div>
 
+<script>
+const chatContainer = document.getElementById("chatContainer");
+const input = document.getElementById("msg-input");
+const sendBtn = document.getElementById("send-btn");
+const userId = "default";
 
-@app.route("/manifest.json")
-def manifest():
-    return send_from_directory(BASE_DIR, "manifest.json")
+function addMsg(text, isSelf) {
+    const row = document.createElement("div");
+    row.className = `msg-row ${isSelf ? "msg-right" : "msg-left"}`;
+    const bubble = document.createElement("div");
+    bubble.className = "msg-bubble";
+    bubble.innerText = text;
+    row.appendChild(bubble);
+    chatContainer.appendChild(row);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
 
+async function sendMessage() {
+    const text = input.value.trim();
+    if (!text) return;
+    addMsg(text, true);
+    input.value = "";
+    const res = await fetch("/chat", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({message:text, user_id:userId})
+    });
+    const data = await res.json();
+    addMsg(data.reply, false);
+}
 
-@app.route("/service-worker.js")
-def service_worker():
-    return send_from_directory(BASE_DIR, "service-worker.js")
+sendBtn.onclick = sendMessage;
+input.onkeydown = e => e.key === "Enter" && sendMessage();
+// 初始开场白
+window.onload = ()=>addMsg("你好啊。看到你主动打招呼，让我想起很久以前在课堂上，那些总是第一个举手问好的孩子。今天天气不错，坐下来聊聊吧？", false);
+</script>
+</body>
+</html>
+"""
+    return html
 
 
 @app.route("/chat", methods=["POST"])
