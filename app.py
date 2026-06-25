@@ -123,8 +123,8 @@ body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
     border-radius:18px;
     line-height:1.5;
     font-size:15px;
-    word-break: break-word; /* 核心修复：强制横向排版与自动换行 */
-    white-space: pre-wrap;  /* 核心修复：保留空格和换行，但正常横向显示 */
+    word-break: break-word;
+    white-space: pre-wrap;
 }
 .msg-left .msg-bubble{background:#eee;border-bottom-left-radius:4px}
 .msg-right .msg-bubble{background:#b87c64;color:#fff;border-bottom-right-radius:4px}
@@ -136,8 +136,20 @@ body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
 <body>
 <div class="header">
     <div class="avatar">L</div>
-    <!-- 这里删掉了 "退休历史老师..." 等多行文字，只留头像 -->
 </div>
+
+<!-- ===== 新增：上传区域开始 ===== -->
+<div id="upload-area" style="background: #fff; border-radius: 14px; padding: 15px; margin-bottom: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+    <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
+        💡 让 AI 模仿语气：上传你的聊天记录（支持 .json 或 .txt）
+    </div>
+    <input type="file" id="file-input" accept=".json,.txt" style="display: none;">
+    <button id="upload-btn" style="background: #e8e8e8; padding: 8px 16px; border: none; border-radius: 20px; cursor: pointer; margin-right: 10px;">📁 选择文件</button>
+    <button id="submit-upload-btn" style="background: #b87c64; color: #fff; padding: 8px 16px; border: none; border-radius: 20px; cursor: pointer;">开始分析语气</button>
+    <div id="upload-status" style="margin-top: 10px; font-size: 13px; color: #999;"></div>
+</div>
+<!-- ===== 新增：上传区域结束 ===== -->
+
 <div class="chat-box" id="chatContainer"></div>
 <div class="input-area">
     <input type="text" id="msg-input" placeholder="说点什么..." />
@@ -150,6 +162,66 @@ const input = document.getElementById("msg-input");
 const sendBtn = document.getElementById("send-btn");
 const userId = "default";
 
+// --- 新增的上传功能逻辑 ---
+const fileInput = document.getElementById("file-input");
+const uploadBtn = document.getElementById("upload-btn");
+const submitUploadBtn = document.getElementById("submit-upload-btn");
+const uploadStatus = document.getElementById("upload-status");
+
+// 1. 点击“选择文件”按钮，触发隐藏的 fileInput
+uploadBtn.addEventListener("click", function() {
+    fileInput.click();
+});
+
+// 2. 显示选中的文件名
+fileInput.addEventListener("change", function() {
+    if (this.files && this.files.length > 0) {
+        uploadStatus.innerText = `已选择文件：${this.files[0].name}`;
+        uploadStatus.style.color = "#666";
+    }
+});
+
+// 3. 点击“开始分析语气”按钮，上传文件
+submitUploadBtn.addEventListener("click", async function() {
+    const file = fileInput.files[0];
+    if (!file) {
+        uploadStatus.innerText = "❌ 请先选择一个文件！";
+        uploadStatus.style.color = "red";
+        return;
+    }
+
+    uploadStatus.innerText = "⏳ 正在分析聊天记录，请稍候...";
+    uploadStatus.style.color = "#b87c64";
+    submitUploadBtn.disabled = true; // 防止重复点击
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("user_id", userId);
+
+    try {
+        const res = await fetch("/upload-history", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            uploadStatus.innerText = `✅ ${data.message} (分析到 ${data.analysis.message_count} 条消息)`;
+            uploadStatus.style.color = "green";
+        } else {
+            uploadStatus.innerText = `❌ 失败：${data.error}`;
+            uploadStatus.style.color = "red";
+        }
+    } catch (error) {
+        uploadStatus.innerText = "❌ 网络错误，请重试。";
+        uploadStatus.style.color = "red";
+    } finally {
+        submitUploadBtn.disabled = false;
+    }
+});
+// --- 新增的上传功能逻辑结束 ---
+
+// --- 原有聊天逻辑 ---
 function addMsg(text, isSelf) {
     const row = document.createElement("div");
     row.className = `msg-row ${isSelf ? "msg-right" : "msg-left"}`;
@@ -178,12 +250,10 @@ async function sendMessage() {
 sendBtn.addEventListener("click", sendMessage);
 input.addEventListener("keydown", function(e) {
     if (e.key === "Enter") {
-        e.preventDefault(); // 阻止输入法可能产生的冲突
+        e.preventDefault();
         sendMessage();
     }
 });
-
-
 </script>
 </body>
 </html>
