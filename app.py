@@ -128,7 +128,30 @@ body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
 }
 .msg-left .msg-bubble{background:#eee;border-bottom-left-radius:4px}
 .msg-right .msg-bubble{background:#b87c64;color:#fff;border-bottom-right-radius:4px}
-.input-area{display:flex;gap:8px}
+.input-wrap{position:relative;margin-top:8px}
+.upload-toast{
+    display:none;
+    margin-bottom:8px;
+    padding:7px 12px;
+    border-radius:10px;
+    background:#e8f5e9;
+    color:#2e7d32;
+    font-size:13px;
+    text-align:center;
+    line-height:1.4;
+}
+.upload-toast.visible{display:block}
+.upload-toast.error{background:#fdecea;color:#c62828}
+.input-area{display:flex;gap:8px;align-items:center}
+#add-btn{
+    width:42px;height:42px;flex-shrink:0;
+    border:1px solid #ddd;border-radius:50%;
+    background:#fff;color:#888;font-size:22px;line-height:1;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+    transition:background .2s,border-color .2s;
+}
+#add-btn:hover{background:#fafafa;border-color:#b87c64;color:#b87c64}
+#add-btn:disabled{opacity:.5;cursor:not-allowed}
 #msg-input{flex:1;padding:12px 16px;border:1px solid #ddd;border-radius:24px;outline:none;font-size:15px}
 #send-btn{padding:12px 22px;background:#b87c64;color:#fff;border:none;border-radius:24px;cursor:pointer}
 </style>
@@ -138,61 +161,58 @@ body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
     <div class="avatar">L</div>
 </div>
 
-<!-- ===== 新增：上传区域开始 ===== -->
-<div id="upload-area" style="background: #fff; border-radius: 14px; padding: 15px; margin-bottom: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-    <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
-        💡 让 AI 模仿语气：上传你的聊天记录（支持 .json 或 .txt）
-    </div>
-    <input type="file" id="file-input" accept=".json,.txt" style="display: none;">
-    <button id="upload-btn" style="background: #e8e8e8; padding: 8px 16px; border: none; border-radius: 20px; cursor: pointer; margin-right: 10px;">📁 选择文件</button>
-    <button id="submit-upload-btn" style="background: #b87c64; color: #fff; padding: 8px 16px; border: none; border-radius: 20px; cursor: pointer;">开始分析语气</button>
-    <div id="upload-status" style="margin-top: 10px; font-size: 13px; color: #999;"></div>
-</div>
-<!-- ===== 新增：上传区域结束 ===== -->
-
 <div class="chat-box" id="chatContainer"></div>
-<div class="input-area">
-    <input type="text" id="msg-input" placeholder="说点什么..." />
-    <button id="send-btn">发送</button>
+
+<input type="file" id="file-input" accept=".json,.txt" style="display:none">
+
+<div class="input-wrap">
+    <div id="upload-toast" class="upload-toast"></div>
+    <div class="input-area">
+        <button id="add-btn" type="button" aria-label="上传聊天记录">+</button>
+        <input type="text" id="msg-input" placeholder="说点什么..." />
+        <button id="send-btn">发送</button>
+    </div>
 </div>
 
 <script>
 const chatContainer = document.getElementById("chatContainer");
 const input = document.getElementById("msg-input");
 const sendBtn = document.getElementById("send-btn");
+const addBtn = document.getElementById("add-btn");
+const fileInput = document.getElementById("file-input");
+const uploadToast = document.getElementById("upload-toast");
 const userId = "default";
 
-// --- 新增的上传功能逻辑 ---
-const fileInput = document.getElementById("file-input");
-const uploadBtn = document.getElementById("upload-btn");
-const submitUploadBtn = document.getElementById("submit-upload-btn");
-const uploadStatus = document.getElementById("upload-status");
+let toastTimer = null;
 
-// 1. 点击“选择文件”按钮，触发隐藏的 fileInput
-uploadBtn.addEventListener("click", function() {
+function showUploadToast(text, isError) {
+    clearTimeout(toastTimer);
+    uploadToast.textContent = text;
+    uploadToast.classList.toggle("error", !!isError);
+    uploadToast.classList.add("visible");
+    toastTimer = setTimeout(function() {
+        uploadToast.classList.remove("visible", "error");
+    }, isError ? 3500 : 2500);
+}
+
+addBtn.addEventListener("click", function() {
     fileInput.click();
 });
 
-// 2. 显示选中的文件名
-fileInput.addEventListener("change", function() {
-    if (this.files && this.files.length > 0) {
-        uploadStatus.innerText = `已选择文件：${this.files[0].name}`;
-        uploadStatus.style.color = "#666";
-    }
-});
-
-// 3. 点击“开始分析语气”按钮，上传文件
-submitUploadBtn.addEventListener("click", async function() {
-    const file = fileInput.files[0];
-    if (!file) {
-        uploadStatus.innerText = "❌ 请先选择一个文件！";
-        uploadStatus.style.color = "red";
+fileInput.addEventListener("change", async function() {
+    const file = this.files[0];
+    this.value = "";
+    if (!file) return;
+    
+    // 【新增这行】：防止用户上传超过 5MB 的大文件导致崩溃
+    if (file.size > 5 * 1024 * 1024) {
+        showUploadToast("⚠️ 文件过大，请上传 5MB 以内的文件", true);
         return;
     }
 
-    uploadStatus.innerText = "⏳ 正在分析聊天记录，请稍候...";
-    uploadStatus.style.color = "#b87c64";
-    submitUploadBtn.disabled = true; // 防止重复点击
+    addBtn.disabled = true;
+
+    addBtn.disabled = true;
 
     const formData = new FormData();
     formData.append("file", file);
@@ -204,22 +224,18 @@ submitUploadBtn.addEventListener("click", async function() {
             body: formData
         });
         const data = await res.json();
-        
+
         if (res.ok) {
-            uploadStatus.innerText = `✅ ${data.message} (分析到 ${data.analysis.message_count} 条消息)`;
-            uploadStatus.style.color = "green";
+            showUploadToast("✅ 语气分析完成，已应用聊天风格");
         } else {
-            uploadStatus.innerText = `❌ 失败：${data.error}`;
-            uploadStatus.style.color = "red";
+            showUploadToast("❌ " + (data.error || "上传失败"), true);
         }
     } catch (error) {
-        uploadStatus.innerText = "❌ 网络错误，请重试。";
-        uploadStatus.style.color = "red";
+        showUploadToast("❌ 网络错误，请重试", true);
     } finally {
-        submitUploadBtn.disabled = false;
+        addBtn.disabled = false;
     }
 });
-// --- 新增的上传功能逻辑结束 ---
 
 // --- 原有聊天逻辑 ---
 function addMsg(text, isSelf) {
@@ -311,7 +327,12 @@ def upload_history():
         else:
             uploaded = request.files.get("file")
             if uploaded:
-                raw_messages = json.loads(uploaded.read().decode("utf-8"))
+                content = uploaded.read().decode("utf-8")
+                filename = (uploaded.filename or "").lower()
+                if filename.endswith(".txt"):
+                    raw_messages = [line for line in content.splitlines() if line.strip()]
+                else:
+                    raw_messages = json.loads(content)
             else:
                 raw_text = request.form.get("text", "")
                 raw_messages = raw_text.splitlines() if raw_text else []
