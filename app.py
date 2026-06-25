@@ -168,11 +168,38 @@ body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
 <div class="input-wrap">
     <div id="upload-toast" class="upload-toast"></div>
     <div class="input-area">
-        <button id="add-btn" type="button" aria-label="上传聊天记录">+</button>
+        <button id="add-btn" type="button" aria-label="更多功能">+</button>
         <input type="text" id="msg-input" placeholder="说点什么..." />
         <button id="send-btn">发送</button>
     </div>
 </div>
+
+<!-- ===== 新增：底部动作面板 (仿微信弹窗) ===== -->
+<div id="action-sheet-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:999; display:none; align-items:flex-end; justify-content:center;">
+    <div style="background:#f5f5f5; width:100%; max-width:700px; padding:20px 15px 30px; border-radius:20px 20px 0 0; animation: slideUp 0.3s ease-out;">
+        
+        <div style="display:flex; gap:20px; flex-wrap:wrap;">
+            <!-- 这里已经是你要的文字 -->
+            <div id="action-upload" style="display:flex; flex-direction:column; align-items:center; width:70px; cursor:pointer;">
+                <div style="width:60px; height:60px; background:#fff; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:28px; box-shadow:0 2px 5px rgba(0,0,0,0.05); margin-bottom:8px;">📄</div>
+                <span style="font-size:13px; color:#333;">文字聊天记录</span>
+            </div>
+        </div>
+
+        <!-- 取消按钮 -->
+        <div id="action-cancel" style="margin-top:15px; background:#fff; border-radius:12px; padding:15px; text-align:center; color:#666; font-size:16px; font-weight:500; cursor:pointer;">
+            取消
+        </div>
+    </div>
+</div>
+
+<!-- 简单的上滑动画 -->
+<style>
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+</style>
 
 <script>
 const chatContainer = document.getElementById("chatContainer");
@@ -195,23 +222,44 @@ function showUploadToast(text, isError) {
     }, isError ? 3500 : 2500);
 }
 
+// --- 新增：控制底部弹窗的交互逻辑 ---
+const actionOverlay = document.getElementById("action-sheet-overlay");
+const actionUpload = document.getElementById("action-upload");
+const actionCancel = document.getElementById("action-cancel");
+
+// 点击底部的 + 号，显示弹窗
 addBtn.addEventListener("click", function() {
-    fileInput.click();
+    actionOverlay.style.display = "flex";
 });
 
+// 点击“取消”或者点击背景，关闭弹窗
+actionCancel.addEventListener("click", function() {
+    actionOverlay.style.display = "none";
+});
+actionOverlay.addEventListener("click", function(e) {
+    if (e.target === actionOverlay) {
+        actionOverlay.style.display = "none";
+    }
+});
+
+// 点击“文字聊天记录”，关闭弹窗并触发文件选择
+actionUpload.addEventListener("click", function() {
+    actionOverlay.style.display = "none"; 
+    fileInput.click(); 
+});
+
+// --- 实际处理文件上传的代码 ---
 fileInput.addEventListener("change", async function() {
     const file = this.files[0];
     this.value = "";
     if (!file) return;
     
-    // 【新增这行】：防止用户上传超过 5MB 的大文件导致崩溃
     if (file.size > 5 * 1024 * 1024) {
         showUploadToast("⚠️ 文件过大，请上传 5MB 以内的文件", true);
         return;
     }
 
-    addBtn.disabled = true;
-
+    showUploadToast("⏳ 正在分析聊天记录...");
     addBtn.disabled = true;
 
     const formData = new FormData();
