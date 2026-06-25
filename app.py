@@ -175,8 +175,13 @@ async function sendMessage() {
     addMsg(data.reply, false);
 }
 
-sendBtn.onclick = sendMessage;
-input.onkeydown = e => e.key === "Enter" && sendMessage();
+sendBtn.addEventListener("click", sendMessage);
+input.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+        e.preventDefault(); // 阻止输入法可能产生的冲突
+        sendMessage();
+    }
+});
 
 
 </script>
