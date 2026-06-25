@@ -113,12 +113,19 @@ def index():
 body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
 .header{text-align:center;padding:20px 0 10px}
 .avatar{width:70px;height:70px;border-radius:50%;background:#b89c84;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px}
-.tagline{color:#777;font-size:14px;margin-bottom:16px}
 .chat-box{background:#fff;border-radius:14px;padding:16px;min-height:60vh;margin-bottom:16px}
 .msg-row{margin:12px 0;display:flex}
 .msg-left{justify-content:flex-start}
 .msg-right{justify-content:flex-end}
-.msg-bubble{max-width:75%;padding:10px 14px;border-radius:18px;line-height:1.5;font-size:15px}
+.msg-bubble{
+    max-width:75%;
+    padding:10px 14px;
+    border-radius:18px;
+    line-height:1.5;
+    font-size:15px;
+    word-break: break-word; /* 核心修复：强制横向排版与自动换行 */
+    white-space: pre-wrap;  /* 核心修复：保留空格和换行，但正常横向显示 */
+}
 .msg-left .msg-bubble{background:#eee;border-bottom-left-radius:4px}
 .msg-right .msg-bubble{background:#b87c64;color:#fff;border-bottom-right-radius:4px}
 .input-area{display:flex;gap:8px}
@@ -129,8 +136,7 @@ body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
 <body>
 <div class="header">
     <div class="avatar">L</div>
-    <!-- 已删除副标题文字 -->
-    <div class="tagline">「岁月无声，记忆有温。」</div>
+    <!-- 这里删掉了 "退休历史老师..." 等多行文字，只留头像 -->
 </div>
 <div class="chat-box" id="chatContainer"></div>
 <div class="input-area">
@@ -171,8 +177,9 @@ async function sendMessage() {
 
 sendBtn.onclick = sendMessage;
 input.onkeydown = e => e.key === "Enter" && sendMessage();
-// 初始开场白
-window.onload = ()=>addMsg("你好啊。看到你主动打招呼，让我想起很久以前在课堂上，那些总是第一个举手问好的孩子。今天天气不错，坐下来聊聊吧？", false);
+
+// 初始开场白 (已缩减)
+window.onload = ()=>addMsg("你好啊，孩子。天气不错，正适合坐喝杯茶聊聊天。你最近过得怎么样？", false);
 </script>
 </body>
 </html>
