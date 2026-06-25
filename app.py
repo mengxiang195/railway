@@ -186,7 +186,8 @@ def index():
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
 body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
-.header{text-align:center;padding:20px 0 10px}
+.header{display:flex;justify-content:space-between;align-items:center;padding:20px 0 10px;position:relative;}
+.avatar-area{text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;}
 .avatar{width:70px;height:70px;border-radius:50%;background:#b89c84;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px}
 .chat-box{background:#fff;border-radius:14px;padding:16px;min-height:60vh;margin-bottom:16px}
 .msg-row{margin:12px 0;display:flex}
@@ -233,7 +234,11 @@ body{background:#f3f3f3;padding:12px;max-width:700px;margin:0 auto}
 </head>
 <body>
 <div class="header">
-    <div class="avatar">L</div>
+    <div></div> <!-- 占位保持居中 -->
+    <div class="avatar-area">
+        <div class="avatar">L</div>
+    </div>
+    <button id="login-btn-top" style="background:#b89c84;color:#fff;padding:6px 16px;border-radius:20px;font-size:14px;border:none;cursor:pointer;transition:opacity 0.2s;">登录 / 注册</button>
 </div>
 
 <div class="chat-box" id="chatContainer"></div>
@@ -283,7 +288,11 @@ const sendBtn = document.getElementById("send-btn");
 const addBtn = document.getElementById("add-btn");
 const fileInput = document.getElementById("file-input");
 const uploadToast = document.getElementById("upload-toast");
-const userId = "default";
+const loginBtn = document.getElementById("login-btn-top");
+
+// 当前用户 ID。如果是未登录状态，设为 "guest"。
+// 稍后接入真实登录后，这里会变成真实的 user_id
+const userId = "guest"; 
 
 let toastTimer = null;
 
@@ -297,17 +306,21 @@ function showUploadToast(text, isError) {
     }, isError ? 3500 : 2500);
 }
 
-// --- 新增：控制底部弹窗的交互逻辑 ---
+// --- 登录相关交互 (占位) ---
+loginBtn.addEventListener("click", function() {
+    // 未来这行会改成去 Clerk/Supabase 登录
+    alert("🔑 这是登录按钮。稍后我们将对接正式的用户登录系统。");
+});
+
+// --- 底部弹窗控制 ---
 const actionOverlay = document.getElementById("action-sheet-overlay");
 const actionUpload = document.getElementById("action-upload");
 const actionCancel = document.getElementById("action-cancel");
 
-// 点击底部的 + 号，显示弹窗
 addBtn.addEventListener("click", function() {
     actionOverlay.style.display = "flex";
 });
 
-// 点击“取消”或者点击背景，关闭弹窗
 actionCancel.addEventListener("click", function() {
     actionOverlay.style.display = "none";
 });
@@ -317,9 +330,16 @@ actionOverlay.addEventListener("click", function(e) {
     }
 });
 
-// 点击“文字聊天记录”，关闭弹窗并触发文件选择
+// --- 核心逻辑：点击“文字聊天记录” ---
 actionUpload.addEventListener("click", function() {
     actionOverlay.style.display = "none"; 
+    
+    // 检查是否已登录
+    if (userId === "guest") {
+        alert("🔒 请先登录后再使用此功能");
+        return; // 直接终止，不执行下面的 fileInput.click()
+    }
+
     fileInput.click(); 
 });
 
