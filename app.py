@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 
+import psycopg2
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_cors import CORS
+from psycopg2.extras import Json
 
 from style_analyzer import analyze_chat_style
 
@@ -21,10 +22,7 @@ CORS(app)
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL")
-
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-STYLE_FILE = DATA_DIR / "style_profiles.json"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 BASE_SYSTEM_PROMPT = """
 你将完全化身用户上传聊天记录里的这个人进行对话，严格遵守以下规则：
@@ -36,25 +34,101 @@ BASE_SYSTEM_PROMPT = """
 """
 
 conversation_history: dict[str, list[dict[str, str]]] = {}
-style_profiles: dict[str, dict] = {}
 
 
-def _load_style_profiles() -> None:
-    global style_profiles
-    if STYLE_FILE.exists():
-        with STYLE_FILE.open("r", encoding="utf-8") as file:
-            style_profiles = json.load(file)
+def _normalize_database_url(url: str) -> str:
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql://", 1)
+    return url
 
 
-def _save_style_profiles() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with STYLE_FILE.open("w", encoding="utf-8") as file:
-        json.dump(style_profiles, file, ensure_ascii=False, indent=2)
+def _get_connection():
+    if not DATABASE_URL:
+        raise RuntimeError("未配置 DATABASE_URL，请在环境变量中设置 PostgreSQL 连接地址")
+    return psycopg2.connect(_normalize_database_url(DATABASE_URL))
+
+
+def _init_db() -> None:
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS style_profiles (
+                    user_id TEXT PRIMARY KEY,
+                    profile JSONB NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+        conn.commit()
+
+
+def _get_style_profile(user_id: str) -> dict | None:
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT profile FROM style_profiles WHERE user_id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+
+
+def _save_style_profile(user_id: str, profile: dict) -> None:
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO style_profiles (user_id, profile, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (user_id)
+                DO UPDATE SET
+                    profile = EXCLUDED.profile,
+                    updated_at = NOW()
+                """,
+                (user_id, Json(profile)),
+            )
+        conn.commit()
+
+
+def _delete_style_profile(user_id: str) -> bool:
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM style_profiles WHERE user_id = %s RETURNING user_id",
+                (user_id,),
+            )
+            deleted = cur.fetchone() is not None
+        conn.commit()
+        return deleted
+
+
+def _has_style_profile(user_id: str) -> bool:
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM style_profiles WHERE user_id = %s",
+                (user_id,),
+            )
+            return cur.fetchone() is not None
+
+
+def _profile_analysis(profile: dict) -> dict:
+    return {
+        "message_count": profile["message_count"],
+        "average_length": profile["average_length"],
+        "tone": profile["tone"],
+        "top_words": profile["top_words"],
+        "top_phrases": profile["top_phrases"],
+        "common_endings": profile["common_endings"],
+        "length_hint": profile["length_hint"],
+        "punctuation_style": profile["punctuation_style"],
+    }
 
 
 def _build_system_prompt(user_id: str) -> str:
     prompt = BASE_SYSTEM_PROMPT
-    profile = style_profiles.get(user_id)
+    profile = _get_style_profile(user_id)
     if profile and profile.get("style_prompt"):
         prompt += "\n\n" + profile["style_prompt"]
     return prompt
@@ -353,7 +427,7 @@ def chat():
                 "reply": reply,
                 "character": "L",
                 "user_id": user_id,
-                "has_custom_style": user_id in style_profiles,
+                "has_custom_style": _has_style_profile(user_id),
             }
         )
     except requests.HTTPError as exc:
@@ -389,23 +463,13 @@ def upload_history():
             return jsonify({"error": "请提供 messages 列表，或上传 JSON/文本聊天记录"}), 400
 
         profile = analyze_chat_style(raw_messages)
-        style_profiles[user_id] = profile
-        _save_style_profiles()
+        _save_style_profile(user_id, profile)
 
         return jsonify(
             {
                 "message": "聊天记录分析完成，后续对话将模仿该风格",
                 "user_id": user_id,
-                "analysis": {
-                    "message_count": profile["message_count"],
-                    "average_length": profile["average_length"],
-                    "tone": profile["tone"],
-                    "top_words": profile["top_words"],
-                    "top_phrases": profile["top_phrases"],
-                    "common_endings": profile["common_endings"],
-                    "length_hint": profile["length_hint"],
-                    "punctuation_style": profile["punctuation_style"],
-                },
+                "analysis": _profile_analysis(profile),
             }
         )
     except ValueError as exc:
@@ -418,37 +482,31 @@ def upload_history():
 
 @app.route("/style/<user_id>", methods=["GET"])
 def get_style(user_id: str):
-    profile = style_profiles.get(user_id)
+    profile = _get_style_profile(user_id)
     if not profile:
         return jsonify({"error": "该用户尚未上传聊天记录"}), 404
 
     return jsonify(
         {
             "user_id": user_id,
-            "analysis": {
-                "message_count": profile["message_count"],
-                "average_length": profile["average_length"],
-                "tone": profile["tone"],
-                "top_words": profile["top_words"],
-                "top_phrases": profile["top_phrases"],
-                "common_endings": profile["common_endings"],
-                "length_hint": profile["length_hint"],
-                "punctuation_style": profile["punctuation_style"],
-            },
+            "analysis": _profile_analysis(profile),
         }
     )
 
 
 @app.route("/style/<user_id>", methods=["DELETE"])
 def delete_style(user_id: str):
-    if user_id in style_profiles:
-        del style_profiles[user_id]
-        _save_style_profiles()
+    deleted = _delete_style_profile(user_id)
     conversation_history.pop(user_id, None)
-    return jsonify({"message": "已清除该用户的风格与会话记录", "user_id": user_id})
+    return jsonify(
+        {
+            "message": "已清除该用户的风格与会话记录" if deleted else "该用户暂无风格记录，已清除会话",
+            "user_id": user_id,
+        }
+    )
 
 
-_load_style_profiles()
+_init_db()
 
 
 if __name__ == "__main__":
