@@ -178,8 +178,7 @@ async function sendMessage() {
 sendBtn.onclick = sendMessage;
 input.onkeydown = e => e.key === "Enter" && sendMessage();
 
-// 初始开场白 (已缩减)
-window.onload = ()=>addMsg("你好啊，孩子。天气不错，正适合坐喝杯茶聊聊天。你最近过得怎么样？", false);
+
 </script>
 </body>
 </html>
